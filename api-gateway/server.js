@@ -9,6 +9,17 @@ const app = express();
 
 const PORT = process.env.PORT || 5000;
 
+app.use(express.json());
+
+app.use((req, res, next) => {
+  console.log({
+    method: req.method,
+    url: req.url,
+    timestamp: new Date().toISOString(),
+  });
+  next();
+});
+
 app.get("/health", (req, res) => {
   res.json({
     service: "api-gateway",
