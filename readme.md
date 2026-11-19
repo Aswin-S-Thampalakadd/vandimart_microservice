@@ -1,0 +1,1 @@
+This is the microservice architecture of VandiMart
