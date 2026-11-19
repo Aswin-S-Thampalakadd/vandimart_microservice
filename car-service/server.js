@@ -32,11 +32,11 @@ app.get("/health", (req, res) => {
   });
 });
 
-app.get("/cars", (req, res) => {
+app.get("/", (req, res) => {
   res.json(cars);
 });
 
-app.get("/cars/:id", async (req, res) => {
+app.get("/:id", async (req, res) => {
   try {
     const car = cars.find((c) => c.id === Number(req.params.id));
 

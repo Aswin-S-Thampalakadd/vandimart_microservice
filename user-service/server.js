@@ -27,14 +27,14 @@ app.get("/health", (req, res) => {
   });
 });
 
-app.get("/users", (req, res) => {
+app.get("/", (req, res) => {
   res.json([
     { id: 1, name: "Aswin" },
     { id: 2, name: "John" },
   ]);
 });
 
-app.get("/users/:id", (req, res) => {
+app.get("/:id", (req, res) => {
   const userId = parseInt(req.params.id);
 
   const user = users.find((user) => user.id === userId);
@@ -45,10 +45,9 @@ app.get("/users/:id", (req, res) => {
   }
 });
 
-app.get("/users/:id/cars", async (req, res) => {
+app.get("/:id/cars", async (req, res) => {
   const userId = parseInt(req.params.id);
   const cars = await axios.get(`${CAR_SERVICE_URL}/cars`);
-  console.log("cars----------", cars.data);
 
   const userCars = cars.data.filter((car) => car.sellerId === userId);
 
