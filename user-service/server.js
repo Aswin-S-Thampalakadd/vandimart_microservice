@@ -1,25 +1,17 @@
+require("dotenv").config();
+
 const express = require("express");
-const axios = require("axios");
+const { eq } = require("drizzle-orm");
+const { db, pool } = require("./db");
+const { users } = require("./schema");
 
 const app = express();
 
-const PORT = process.env.PORT || 5001;
+const port = process.env.PORT || 5001;
 
-const CAR_SERVICE_URL = process.env.CAR_SERVICE_URL || "http://localhost:5002";
+app.use(express.json());
 
-const users = [
-  {
-    id: 1,
-    name: "Aswin",
-    email: "aswin@example.com",
-  },
-  {
-    id: 2,
-    name: "John",
-    email: "john@example.com",
-  },
-];
-
+// Health check
 app.get("/health", (req, res) => {
   res.json({
     service: "user-service",
@@ -27,40 +19,84 @@ app.get("/health", (req, res) => {
   });
 });
 
-app.get("/", (req, res) => {
-  res.json([
-    { id: 1, name: "Aswin" },
-    { id: 2, name: "John" },
-  ]);
+// Get all users
+app.get("/users", async (req, res) => {
+  try {
+    const result = await db.select().from(users);
+    res.json(result);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      message: "Failed to fetch users",
+    });
+  }
 });
 
-app.get("/:id", (req, res) => {
-  const userId = parseInt(req.params.id);
+// Get user by ID
+app.get("/users/:id", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
 
-  const user = users.find((user) => user.id === userId);
-  if (user) {
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({
+        message: "Invalid user ID",
+      });
+    }
+
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+
+    if (!user) {
+      return res.status(404).json({
+        message: "User not found",
+      });
+    }
+
     res.json(user);
-  } else {
-    res.status(404).json({ message: "User not found" });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      message: "Failed to fetch user",
+    });
   }
 });
 
-app.get("/:id/cars", async (req, res) => {
-  const userId = parseInt(req.params.id);
-  const cars = await axios.get(`${CAR_SERVICE_URL}/cars`);
+// Create user
+app.post("/users", async (req, res) => {
+  try {
+    const { name, email } = req.body;
 
-  const userCars = cars.data.filter((car) => car.sellerId === userId);
+    if (!name || !email) {
+      return res.status(400).json({
+        message: "Name and email are required",
+      });
+    }
 
-  if (userCars.length === 0) {
-    return res.status(404).json({ message: "No cars found for this user" });
+    const [user] = await db.insert(users).values({ name, email }).returning();
+
+    res.status(201).json(user);
+  } catch (error) {
+    console.error(error);
+
+    if (error.code === "23505") {
+      return res.status(409).json({
+        message: "Email already exists",
+      });
+    }
+
+    res.status(500).json({
+      message: "Failed to create user",
+    });
   }
-
-  if (!cars) {
-    return res.status(503).json({ message: "Car service is down" });
-  }
-  res.json(userCars);
 });
 
-app.listen(PORT, () => {
-  console.log(`User service is running on port ${PORT}`);
+const server = app.listen(port, () => {
+  console.log(`User Service running on port ${port}`);
 });
+
+async function shutdown() {
+  server.close();
+  await pool.end();
+}
+
+process.on("SIGTERM", shutdown);
+process.on("SIGINT", shutdown);

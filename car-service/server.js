@@ -1,29 +1,16 @@
+require("dotenv").config();
+
 const express = require("express");
 const axios = require("axios");
+const { eq } = require("drizzle-orm");
+
+const { db, pool } = require("./db");
+const { cars } = require("./schema");
 
 const app = express();
+const port = process.env.PORT || 5002;
 
 app.use(express.json());
-
-const USER_SERVICE_URL =
-  process.env.USER_SERVICE_URL || "http://localhost:5001";
-
-const cars = [
-  {
-    id: 1,
-    brand: "Toyota",
-    model: "Innova",
-    price: 1200000,
-    sellerId: 1,
-  },
-  {
-    id: 2,
-    brand: "Honda",
-    model: "City",
-    price: 850000,
-    sellerId: 2,
-  },
-];
 
 app.get("/health", (req, res) => {
   res.json({
@@ -32,13 +19,90 @@ app.get("/health", (req, res) => {
   });
 });
 
-app.get("/", (req, res) => {
-  res.json(cars);
+// Get all cars
+app.get("/cars", async (req, res) => {
+  try {
+    const result = await db.select().from(cars);
+    res.json(result);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      message: "Failed to fetch cars",
+    });
+  }
 });
 
-app.get("/:id", async (req, res) => {
+// Create a car
+app.post("/cars", async (req, res) => {
   try {
-    const car = cars.find((c) => c.id === Number(req.params.id));
+    const { brand, model, price, sellerId } = req.body;
+
+    if (
+      !brand ||
+      !model ||
+      !Number.isInteger(price) ||
+      price <= 0 ||
+      !Number.isInteger(sellerId) ||
+      sellerId <= 0
+    ) {
+      return res.status(400).json({
+        message: "Invalid car details",
+      });
+    }
+
+    // Verify seller through User Service
+    const sellerResponse = await axios.get(
+      `${process.env.USER_SERVICE_URL}/users/${sellerId}`,
+      { timeout: 3000 },
+    );
+
+    const [car] = await db
+      .insert(cars)
+      .values({
+        brand,
+        model,
+        price,
+        sellerId,
+      })
+      .returning();
+
+    res.status(201).json({
+      ...car,
+      seller: sellerResponse.data,
+    });
+  } catch (error) {
+    console.error(error.message);
+
+    if (error.response?.status === 404) {
+      return res.status(400).json({
+        message: "Seller does not exist",
+      });
+    }
+
+    if (error.code === "ECONNABORTED" || error.code === "ECONNREFUSED") {
+      return res.status(503).json({
+        message: "User Service unavailable",
+      });
+    }
+
+    res.status(500).json({
+      message: "Failed to create car",
+    });
+  }
+});
+
+// Get car with seller details
+app.get("/cars/:id", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({
+        message: "Invalid car ID",
+      });
+    }
+
+    const [car] = await db.select().from(cars).where(eq(cars.id, id));
 
     if (!car) {
       return res.status(404).json({
@@ -46,41 +110,44 @@ app.get("/:id", async (req, res) => {
       });
     }
 
-    // Communicate with User Service
-    const userResponse = await axios.get(
-      `http://localhost:3001/users/${car.sellerId}`,
+    const sellerResponse = await axios.get(
+      `${process.env.USER_SERVICE_URL}/users/${car.sellerId}`,
       { timeout: 3000 },
     );
 
-    const result = {
+    res.json({
       ...car,
-      seller: userResponse.data,
-    };
-
-    res.json(result);
+      seller: sellerResponse.data,
+    });
   } catch (error) {
-    console.error("User Service communication failed:", error.message);
+    console.error(error.message);
 
     if (error.response?.status === 404) {
       return res.status(502).json({
-        message: "Seller information could not be retrieved",
+        message: "Seller information unavailable",
       });
     }
 
     if (error.code === "ECONNABORTED" || error.code === "ECONNREFUSED") {
       return res.status(503).json({
-        message: "User Service is currently unavailable",
+        message: "User Service unavailable",
       });
     }
 
-    res.status(502).json({
-      message: "Failed to communicate with User Service",
+    res.status(500).json({
+      message: "Failed to fetch car",
     });
   }
 });
 
-const PORT = 5002;
-
-app.listen(PORT, () => {
-  console.log(`Car Service running on ${PORT}`);
+const server = app.listen(port, () => {
+  console.log(`Car Service running on port ${port}`);
 });
+
+async function shutdown() {
+  server.close();
+  await pool.end();
+}
+
+process.on("SIGTERM", shutdown);
+process.on("SIGINT", shutdown);
