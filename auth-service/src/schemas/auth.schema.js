@@ -12,4 +12,13 @@ const authUsers = pgTable("auth_users", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-module.exports = { authUsers };
+const refreshTokens = pgTable("refresh_tokens", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id", { length: 255 }).notNull(),
+  tokenHash: varchar("token_hash", { length: 255 }).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  revokedAt: timestamp("revoked_at"),
+});
+
+module.exports = { authUsers, refreshTokens };
