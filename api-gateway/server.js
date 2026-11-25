@@ -2,6 +2,7 @@ const express = require("express");
 
 const dotenv = require("dotenv");
 const { createProxyMiddleware } = require("http-proxy-middleware");
+const authenticate = require("./middleware/auth.middleware");
 
 dotenv.config();
 
@@ -29,6 +30,8 @@ app.get("/health", (req, res) => {
 
 app.use(
   "/api/users",
+  authenticate,
+
   createProxyMiddleware({
     target: process.env.USER_SERVICE_URL,
     changeOrigin: true,
