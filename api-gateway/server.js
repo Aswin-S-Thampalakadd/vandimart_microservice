@@ -3,6 +3,7 @@ const express = require("express");
 const dotenv = require("dotenv");
 const { createProxyMiddleware } = require("http-proxy-middleware");
 const authenticate = require("./middleware/auth.middleware");
+const authorize = require("./middleware/authorize.middleware");
 
 dotenv.config();
 
@@ -48,6 +49,19 @@ app.use(
     changeOrigin: true,
     pathRewrite: {
       "^/api/cars": "/cars",
+    },
+  }),
+);
+
+app.use(
+  "/api/admin",
+  authenticate,
+  authorize("ADMIN"),
+  createProxyMiddleware({
+    target: process.env.ADMIN_SERVICE_URL,
+    changeOrigin: true,
+    pathRewrite: {
+      "^/api/admin": "/admin",
     },
   }),
 );
